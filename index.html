@@ -95,6 +95,8 @@ legend{font-weight:700;margin-bottom:8px}
 /* ============ 5. BOOKS IN YOUR FUTURE ============ */
 .dots{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--d,11px),1fr));gap:3px;margin-top:16px}
 .dots i{aspect-ratio:1;border-radius:50%;background:var(--gold);border:1px solid var(--ink)}
+/* ============ 5b. TBR COUNTDOWN ============ */
+#tbWa{margin-top:16px}
 /* ============ 7. CHALLENGE ============ */
 .banner{background:var(--ink);color:var(--bg);border-radius:var(--r);padding:16px 18px;margin-top:18px;text-align:center}
 .banner p{font:700 1.2rem/1.3 Fraunces,Georgia,serif;margin-bottom:10px}
@@ -231,6 +233,27 @@ footer svg{width:44px;height:44px;display:block;margin:0 auto 6px}
     <p class="big" id="fuText"></p>
     <p class="note" id="fuKey"></p>
     <div class="dots" id="fuDots" aria-hidden="true"></div>
+  </div>
+</section>
+
+<!-- ============ 5b. TBR COUNTDOWN ============ -->
+<section class="card" id="tbr">
+  <h2>How long will your TBR take?</h2>
+  <p class="sub">That growing "to be read" pile. Let's do the maths. 😬</p>
+  <div class="grid2">
+    <label for="tbN" class="lab">Books on TBR</label>
+    <label for="tbAdd" class="lab">Added a month</label>
+    <input class="field" id="tbN" type="number" inputmode="numeric" min="1" max="100000" placeholder="e.g. 60">
+    <input class="field" id="tbAdd" type="number" inputmode="decimal" min="0" max="1000" step="0.5" value="0">
+  </div>
+  <p class="err" id="tbErr" hidden></p>
+  <div id="tbOut" class="result" hidden aria-live="polite">
+    <p class="big" id="tbBig"></p>
+    <p id="tbWhen"></p>
+    <p class="math" id="tbLine"></p>
+    <p class="note" id="tbMore"></p>
+    <p class="note" id="tbWink"></p>
+    <a class="btn wide" id="tbWa" href="#" target="_blank" rel="noopener">Ask your friends on WhatsApp 💬</a>
   </div>
 </section>
 <svg class="doodle flip" aria-hidden="true"><use href="#d1"/></svg>
@@ -528,6 +551,59 @@ function renderFuture() {
 }
 ['fuAge', 'fuTo'].forEach(id => $(id).addEventListener('input', renderFuture));
 onState(renderFuture);
+
+/* ============ 5b. TBR COUNTDOWN ============
+   Months to clear = TBR ÷ (books you finish a month − new books you add a month).
+   Uses the calculator's minutes and speed. If "Books in your future" has an age, it also says how many lives it takes. */
+const MONTH_DAYS = 365 / 12;
+function howLong(months) {                              // 30 → "2 years 6 months"
+  if (months < 1) { const d = Math.max(1, Math.ceil(months * MONTH_DAYS)); return `${d} ${d === 1 ? 'day' : 'days'}`; }
+  const m = Math.round(months), y = Math.floor(m / 12), r = m % 12;
+  if (y >= 10) return `${nf(months / 12)} years`;
+  return [y && `${y} ${y === 1 ? 'year' : 'years'}`, r && `${r} ${r === 1 ? 'month' : 'months'}`].filter(Boolean).join(' ');
+}
+function renderTbr() {
+  const n = Math.round(+$('tbN').value), add = +$('tbAdd').value || 0, err = $('tbErr');
+  $('tbOut').hidden = true; err.hidden = true;
+  if (!$('tbN').value) return;
+  if (n < 1 || n > 100000 || add < 0 || add > 1000) {
+    err.textContent = 'Use positive numbers here. (A TBR of up to 1,00,000. We believe you.)'; err.hidden = false; return;
+  }
+  const read = books(S.min, S.wpm, MONTH_DAYS), net = read - add;
+  const pace = `${S.min} min a day at ${S.wpm} wpm`;
+  let share;
+  if (net <= 0) {                                         // the pile grows faster than you read
+    const breakEven = Math.ceil(add * WORDS_PER_BOOK / (S.wpm * MONTH_DAYS));
+    $('tbBig').textContent = 'Never. 😅';
+    $('tbWhen').textContent = 'Your TBR grows faster than you read it.';
+    $('tbLine').textContent = `${fb(add)} added a month vs ${fb(read)} read a month · ${pace}`;
+    $('tbMore').textContent = `Read more than ${breakEven} min a day just to stop it growing.`;
+    $('tbWink').textContent = "You'll need another life. Or fewer bookshop visits. 📚";
+    share = `My TBR is growing faster than I can read it 😅 How long would yours take?`;
+  } else {
+    const months = n / net, end = new Date(NOW.getTime() + months * MONTH_DAYS * 864e5);
+    const net10 = books(S.min + 10, S.wpm, MONTH_DAYS) - add;
+    $('tbBig').textContent = howLong(months);
+    $('tbWhen').textContent = `to clear it. Done around ${end.toLocaleDateString('en-IN', {month: 'short', year: 'numeric'})}.`;
+    $('tbLine').textContent = `${nf(n)} ${n === 1 ? 'book' : 'books'} ÷ ` +
+      (add ? `${fb(net)} a month (${fb(read)} read − ${fb(add)} added)` : `${fb(read)} ${plural(read, 'book')} a month`) + ` · ${pace}`;
+    $('tbMore').textContent = `With 10 more minutes a day: ${howLong(n / net10)}.`;
+    const age = Math.round(+$('fuAge').value), to = Math.round(+$('fuTo').value) || 80, years = months / 12;
+    if ($('fuAge').value && age >= 1 && age <= 110 && to > age && to <= 120) {
+      const lives = years / (to - age);
+      $('tbWink').textContent = lives > 1
+        ? `That's ${lives.toFixed(1)} lives (counting to ${to}). Bas 10 minute aur? 😅`
+        : `One life is enough. You'll be done around age ${Math.round(age + years)}. 😌`;
+    } else {
+      $('tbWink').textContent = 'Need another life for it? Add your age in "Books in your future" above. 😉';
+    }
+    share = `My TBR will take me ${howLong(months)} to finish 😅 How long will yours take? Bas 10 minute aur.`;
+  }
+  $('tbWa').href = 'https://wa.me/?text=' + encodeURIComponent(share + '\n' + BASE + '#tbr');
+  $('tbOut').hidden = false;
+}
+['tbN', 'tbAdd', 'fuAge', 'fuTo'].forEach(id => $(id).addEventListener('input', renderTbr));
+onState(renderTbr);
 
 /* ============ 6. FINISH-BY-DATE PLANNER ============ */
 const pad = n => String(n).padStart(2, '0');
